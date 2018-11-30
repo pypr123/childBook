@@ -794,9 +794,9 @@ def user_buy():
         
         get_user = request.args.get('unionid')
         timeNow = str(int(time.time()))
-        add_user = User_order(openid=get_openid,user=get_user,timestamp=timeNow)
-        db.session.add(add_user)
-        db.session.commit()
+        # add_user = User_order(openid=get_openid,user=get_user,timestamp=timeNow)
+        # db.session.add(add_user)
+        # db.session.commit()
 
         # 生成随机32位随机字符串
         nonce_str = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(32))
@@ -806,11 +806,12 @@ def user_buy():
         trade_str = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(6))
         # 生成订单号
         out_trade_no = trade_time + trade_str
-        sign_list = ['appid=wxdfb3be4199fc3a86','mch_id=1518791341','nonce_str=%s' %nonce_str,
+        sign_list = ['appid=wxdfb3be4199fc3a86','mch_id=1518791341','nonce_str=%s' %nonce_str,'sign_type=MD5',
                      'body=狐涂涂儿童英语绘本-游戏充值','out_trade_no=%s' %out_trade_no,'total_fee=%s' %get_price,
                      'spbill_create_ip=%s' %user_ip,'notify_url=https://xcx.51babyapp.com/zy9/notice',
                      'trade_type=JSAPI','openid=%s' %get_openid]
         sign_list.sort()
+        print(sign_list)
         join_sign = '&'.join(sign_list) + "&key=FMSDAgRDrM3XnaDmeRXN7g5mkBOPuM4a"
         sign = hashlib.md5(join_sign.encode('utf-8')).hexdigest().upper()
         datas = """
@@ -819,6 +820,7 @@ def user_buy():
                     <mch_id>1518791341</mch_id>
                     <nonce_str>{}</nonce_str>
                     <sign>{}</sign>
+                    <sign_type>MD5</sign_type>
                     <body>狐涂涂儿童英语绘本-游戏充值</body>
                     <out_trade_no>{}</out_trade_no>
                     <total_fee>{}</total_fee>
@@ -833,12 +835,12 @@ def user_buy():
         resp = req.Request(url=url, data=datas, headers=headers)
         res_response = req.urlopen(resp).read().decode()
         res_result = xmltodict.parse(res_response)
-        
+        print(res_result)
         result = {}
         pnonceStr = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(32))
         if res_result['xml']['prepay_id']:
             prepay_id = res_result['xml']['prepay_id']
-            mdList = ['appid=wxdfb3be4199fc3a86','nonceStr=%s' %pnonceStr,
+            mdList = ['appId=wxdfb3be4199fc3a86','nonceStr=%s' %pnonceStr,
                       'package=prepay_id=%s' %prepay_id,'signType=MD5',
                       'timeStamp=%s' %timeNow]
             mdList.sort()
@@ -857,9 +859,31 @@ def notice():
         return '换个请求方式'
     else:
         data = request.data
-        print(data.decode())
-        print(data)
-        return 'ok'
+        res_data = xmltodict.parse(data)
+        if res_data['xml']['return_code'] == 'SUCCESS':
+            result ='''
+                    <xml>
+                    <return_code><![CDATA[SUCCESS]]></return_code>
+                    </xml>
+                    '''
+            get_openid = res_data['xml']['openid']
+            get_out_trade_no = res_data['xml']['out_trade_no']
+            get_result_code = res_data['xml']['result_code']
+            get_time_end = res_data['xml']['time_end']
+            get_total_fee = str(res_data['xml']['total_fee'])
+            add_user = User_order(openid=get_openid,out_trade_no=get_out_trade_no,
+                                  result_code=get_result_code,time_end=get_time_end,
+                                  total_fee=get_total_fee)
+            db.session.add(add_user)
+            db.session.commit()
+            return result
+        else:
+            result ='''
+                    <xml>
+                    <return_code><![CDATA[FAIL]]></return_code>
+                    </xml>
+                    '''
+            return result
 
 @web.route('/signIn',methods=["GET","POST"])
 def signIn():
